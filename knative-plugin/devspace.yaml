@@ -1,18 +1,31 @@
-version: v1beta11
+version: v2beta1
+name: vcluster-knative
+
 vars:
-  - name: PLUGIN_IMAGE
-    value: ishankhare07/vcluster-knative-serving-plugin
-  - name: K3S_IMAGE
-    value: rancher/k3s:v1.23.5-k3s1
-  - name: SERVICE_CIDR
-    command: vcluster get service-cidr
+  PLUGIN_IMAGE: ishankhare07/vcluster-knative-serving-plugin
+  K3S_IMAGE: rancher/k3s:v1.23.5-k3s1
+
 images:
-  vcluster:
-    image: ${PLUGIN_IMAGE}
+  knative-dev:
+    image: ${PLUGIN_IMAGE}-dev
     dockerfile: ./Dockerfile.dev
     rebuildStrategy: ignoreContextChanges
+    buildArgs:
+      TARGETARCH: amd64
+    target: builder
+    buildKit: {}
+  knative:
+    image: ${PLUGIN_IMAGE}
+    dockerfile: ./Dockerfile
+    rebuildStrategy: ignoreContextChanges
+    buildArgs:
+      TARGETARCH: amd64
+    target: builder
+    buildKit:
+      inCluster: {}
+
 deployments:
-  - name: vcluster
+  vcluster:
     helm:
       chart:
         name: vcluster
@@ -26,31 +39,42 @@ deployments:
             image: ${PLUGIN_IMAGE}
         service:
           type: NodePort
-        serviceCIDR: ${SERVICE_CIDR}
-        serviceAccount:
-          create: false
-          name: default
-        vcluster:
-          image: ${K3S_IMAGE}
+        serviceCIDR: $([ $1 == "dev" ] && vcluster get service-cidr || echo "null")
         rbac:
           clusterRole:
             create: true
           role:
             extended: true
+        serviceAccount:
+          create: false
+          name: default
         syncer:
           readinessProbe:
             enabled: false
           livenessProbe:
             enabled: false
 
+
 dev:
-  terminal:
+  vcluster:
     imageSelector: ${PLUGIN_IMAGE}
-    command: ["./devspace_start.sh"]
-  ports:
-    - imageSelector: ${PLUGIN_IMAGE}
-      forward:
-        - port: 2350
-          remotePort: 2345
-  sync:
-    - imageSelector: ${PLUGIN_IMAGE}
+    terminal:
+      command: "./devspace_start.sh"
+    ports:
+      - port: 2350:2345
+    sync:
+      - path: ./:/go/vcluster
+
+pipelines:
+  build: |-
+    # Make sure pull secrets are there
+    ensure_pull_secrets --all
+    
+    # Build the vcluster image
+    build_images knative
+  build-dev: |-
+    # Make sure pull secrets are there
+    ensure_pull_secrets --all
+    
+    # Build the vcluster image
+    build_images knative-dev

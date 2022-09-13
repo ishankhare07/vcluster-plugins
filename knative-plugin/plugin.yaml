@@ -2,7 +2,6 @@
 # with the other vcluster values during vcluster create or helm install.
 plugin:
   knative-serving-plugin:
-    image: ishankhare07/vcluster-plugins/knative-serving-plugin
     imagePullPolicy: IfNotPresent
     rbac:
       role:
