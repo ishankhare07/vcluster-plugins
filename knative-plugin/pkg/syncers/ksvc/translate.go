@@ -33,22 +33,6 @@ func (k *ksvcSyncer) translateUpdate(pObj, vObj *ksvcv1.Service) *ksvcv1.Service
 
 func (k *ksvcSyncer) translateUpdateBackwards(pObj, vObj *ksvcv1.Service) *ksvcv1.Service {
 	var updated *ksvcv1.Service
-	// check annotations and labels
-	if !equality.Semantic.DeepEqual(pObj.Labels, vObj.Labels) {
-		updated = newIfNil(updated, vObj)
-		updated.Labels = pObj.Labels
-	}
-
-	// check annotations
-	newAnnotations := map[string]string{}
-	for k, v := range pObj.Annotations {
-		newAnnotations[k] = v
-	}
-
-	if !equality.Semantic.DeepEqual(newAnnotations, vObj.Annotations) {
-		updated = newIfNil(updated, vObj)
-		updated.Annotations = newAnnotations
-	}
 
 	// check spec
 	if !equality.Semantic.DeepEqual(pObj.Spec.Traffic, vObj.Spec.Traffic) {
