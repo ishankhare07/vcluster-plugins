@@ -23,7 +23,27 @@ func (r *revisionSyncer) ReverseTranslateMetadata(ctx *context.SyncContext, obj,
 
 	// reset owner references
 	// TODO: find and set correct owner references
-	rev.OwnerReferences = []metav1.OwnerReference{}
+	// revert to config or route owner instead?
+	var controller, bod *bool
+	for _, owner := range rev.OwnerReferences {
+		if owner.Kind == "Service" {
+			controller = owner.Controller
+			bod = owner.BlockOwnerDeletion
+		}
+	}
+
+	parentKsvc := parent.(*ksvcv1.Service)
+
+	rev.OwnerReferences = []metav1.OwnerReference{
+		{
+			APIVersion:         parentKsvc.APIVersion,
+			Kind:               parentKsvc.Kind,
+			Name:               parentKsvc.GetName(),
+			UID:                parentKsvc.GetUID(),
+			Controller:         controller,
+			BlockOwnerDeletion: bod,
+		},
+	}
 
 	return rev
 }

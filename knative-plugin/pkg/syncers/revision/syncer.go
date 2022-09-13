@@ -3,6 +3,7 @@ package revision
 import (
 	plaincontext "context"
 
+	"github.com/loft-sh/vcluster-sdk/clienthelper"
 	"github.com/loft-sh/vcluster-sdk/syncer"
 	"github.com/loft-sh/vcluster-sdk/syncer/context"
 	"github.com/loft-sh/vcluster-sdk/syncer/mapper"
@@ -126,9 +127,15 @@ func (r *revisionSyncer) SyncUpCreate(ctx *context.SyncContext, pObj client.Obje
 	ctx.Log.Debugf("reverse name should be ", r.PhysicalToVirtual(pObj))
 
 	// TODO: find relevant parent of object
-	pObj = r.ReverseTranslateMetadata(ctx, pObj, nil)
+	parent, err := r.findParentObject(ctx, pObj)
+	if err != nil {
+		klog.Errorf("no parent found for object %s/%s, %v", pObj.GetNamespace(), pObj.GetName(), err)
+		return ctrl.Result{}, err
+	}
 
-	err := ctx.VirtualClient.Create(ctx.Context, pObj)
+	pObj = r.ReverseTranslateMetadata(ctx, pObj, parent)
+
+	err = ctx.VirtualClient.Create(ctx.Context, pObj)
 	if err != nil {
 		ctx.Log.Errorf("error creating virtual revision object %s/%s, %v", pObj.GetNamespace(), pObj.GetName(), err)
 		r.NamespacedTranslator.EventRecorder().Eventf(pObj, "Warning", "SyncError", "Error syncing to virtual cluster: %v", err)
@@ -136,6 +143,32 @@ func (r *revisionSyncer) SyncUpCreate(ctx *context.SyncContext, pObj client.Obje
 	}
 
 	return ctrl.Result{}, nil
+}
+
+func (r *revisionSyncer) findParentObject(ctx *context.SyncContext, obj client.Object) (client.Object, error) {
+	klog.Info("extracting from indexer")
+
+	parent := &ksvcv1.Service{}
+
+	owners := obj.GetOwnerReferences()
+	for _, owner := range owners {
+		err := clienthelper.GetByIndex(ctx.Context, ctx.VirtualClient, parent, translator.IndexByPhysicalName, owner.Name)
+		if err != nil {
+			klog.Errorf("error while getting by index %v", err)
+			return nil, err
+		} else {
+			klog.Infof("found owner for virtual revision %s/%s => ksvc:%s/%s",
+				obj.GetNamespace(),
+				obj.GetName(),
+				parent.GetNamespace(),
+				parent.GetName(),
+			)
+
+			break
+		}
+	}
+
+	return parent, nil
 }
 
 func (r *revisionSyncer) IsManaged(obj client.Object) (bool, error) {
@@ -154,6 +187,7 @@ func (r *revisionSyncer) IsManaged(obj client.Object) (bool, error) {
 
 	owners := metaAccessor.GetOwnerReferences()
 
+	klog.Infof("finding owner for %s", obj.GetName())
 	for _, owner := range owners {
 		parent, err := r.physicalClient.Scheme().New(schema.FromAPIVersionAndKind(owner.APIVersion, owner.Kind))
 		if err != nil {
