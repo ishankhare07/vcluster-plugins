@@ -34,6 +34,14 @@ func (k *ksvcSyncer) translateUpdate(pObj, vObj *ksvcv1.Service) *ksvcv1.Service
 func (k *ksvcSyncer) translateUpdateBackwards(pObj, vObj *ksvcv1.Service) *ksvcv1.Service {
 	var updated *ksvcv1.Service
 
+	// check annotations
+	if !equality.Semantic.DeepEqual(pObj.ObjectMeta.Annotations, vObj.ObjectMeta.Annotations) {
+		klog.Infof("annotations for vKsvc %s:%s, is out of sync", vObj.Namespace, vObj.Name)
+		updated = newIfNil(updated, vObj)
+
+		updated.ObjectMeta.Annotations = pObj.ObjectMeta.Annotations
+	}
+
 	// check spec
 	if !equality.Semantic.DeepEqual(pObj.Spec.Traffic, vObj.Spec.Traffic) {
 		klog.Infof("spec.traffic for vKsvc %s:%s, is out of sync", vObj.Namespace, vObj.Name)
@@ -43,6 +51,39 @@ func (k *ksvcSyncer) translateUpdateBackwards(pObj, vObj *ksvcv1.Service) *ksvcv
 		// we should not allow physical object traffic to modify
 		// revision names or traffic percent in virtual object
 		updated.Spec.Traffic = pObj.Spec.Traffic
+	}
+
+	// check RevisionSpec
+	if !equality.Semantic.DeepEqual(pObj.Spec.Template.Spec, vObj.Spec.Template.Spec) {
+		if vObj.Spec.Template.Spec.PodSpec.Containers[0].Name == "" {
+			updated = newIfNil(updated, vObj)
+			updated.Spec.Template.Spec.PodSpec.Containers[0].Name = pObj.Spec.Template.Spec.PodSpec.Containers[0].Name
+		}
+
+		if vObj.Spec.Template.Spec.PodSpec.EnableServiceLinks == nil {
+			updated = newIfNil(updated, vObj)
+			updated.Spec.Template.Spec.PodSpec.EnableServiceLinks = pObj.Spec.Template.Spec.PodSpec.EnableServiceLinks
+		}
+
+		if vObj.Spec.Template.Spec.ContainerConcurrency == nil {
+			updated = newIfNil(updated, vObj)
+			updated.Spec.Template.Spec.ContainerConcurrency = pObj.Spec.Template.Spec.ContainerConcurrency
+		}
+
+		if vObj.Spec.Template.Spec.TimeoutSeconds == nil {
+			updated = newIfNil(updated, vObj)
+			updated.Spec.Template.Spec.TimeoutSeconds = pObj.Spec.Template.Spec.TimeoutSeconds
+		}
+
+		if vObj.Spec.Template.Spec.ResponseStartTimeoutSeconds == nil {
+			updated = newIfNil(updated, vObj)
+			updated.Spec.Template.Spec.ResponseStartTimeoutSeconds = pObj.Spec.Template.Spec.ResponseStartTimeoutSeconds
+		}
+
+		if vObj.Spec.Template.Spec.IdleTimeoutSeconds == nil {
+			updated = newIfNil(updated, vObj)
+			updated.Spec.Template.Spec.IdleTimeoutSeconds = pObj.Spec.Template.Spec.IdleTimeoutSeconds
+		}
 	}
 
 	return updated
