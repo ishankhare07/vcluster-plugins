@@ -58,6 +58,9 @@ func (k *ksvcSyncer) Sync(ctx *context.SyncContext, pObj client.Object, vObj cli
 	if !equality.Semantic.DeepEqual(vKsvc.Status, pKsvc.Status) {
 		newKsvc := vKsvc.DeepCopy()
 		newKsvc.Status = pKsvc.Status
+
+		// force status.observedGeneration to match with metadata.Generation
+		newKsvc.Status.ObservedGeneration = newKsvc.Generation
 		klog.Infof("Update virtual ksvc %s:%s, because status is out of sync", vKsvc.Namespace, vKsvc.Name)
 		err := ctx.VirtualClient.Status().Update(ctx.Context, newKsvc)
 		if err != nil {
