@@ -45,14 +45,14 @@ var _ = ginkgo.Describe("Ksvc is synced down and applied as expected", func() {
 		response, httpErr := client.Get(url)
 		if httpErr != nil {
 			klog.Errorf("error during GET request: %v", httpErr)
-			return false, httpErr
+			return false, nil
 		}
 		defer response.Body.Close()
 
 		body, err := io.ReadAll(response.Body)
 		if err != nil {
 			klog.Errorf("error reading response body: %v", err)
-			return false, err
+			return false, nil
 		}
 
 		if body == nil {
@@ -137,8 +137,10 @@ var _ = ginkgo.Describe("Ksvc is synced down and applied as expected", func() {
 
 	ginkgo.It("Test if ksvc synced down successfully", func() {
 		err := wait.PollImmediate(time.Second, framework.PollTimeout, func() (bool, error) {
+			klog.Infof("looking in namespace: %s", framework.DefaultFramework.VclusterNamespace)
+			klog.Infof("looking for %s", translate.PhysicalName(KnativeServiceName, ns))
 			_, err := pServingClient.Services(
-				framework.DefaultVclusterNamespace).
+				framework.DefaultFramework.VclusterNamespace).
 				Get(f.Context,
 					translate.PhysicalName(
 						KnativeServiceName, ns),
@@ -154,12 +156,12 @@ var _ = ginkgo.Describe("Ksvc is synced down and applied as expected", func() {
 			return true, nil
 		})
 
-		framework.ExpectNoError(err, fmt.Sprintf("unable to find physical service %s in namespace %s", translate.PhysicalName(KnativeServiceName, ns), framework.DefaultVclusterNamespace))
+		framework.ExpectNoError(err, fmt.Sprintf("unable to find physical service %s in namespace %s", translate.PhysicalName(KnativeServiceName, ns), framework.DefaultFramework.VclusterNamespace))
 	})
 
 	ginkgo.It("Test if virtual ksvc status synced up with physical ksvc", func() {
 		pKsvc, err := pServingClient.Services(
-			framework.DefaultVclusterNamespace).
+			framework.DefaultFramework.VclusterNamespace).
 			Get(f.Context,
 				translate.PhysicalName(
 					KnativeServiceName, ns),
@@ -168,6 +170,11 @@ var _ = ginkgo.Describe("Ksvc is synced down and applied as expected", func() {
 
 		vKsvc, err := vServingClient.Services(ns).Get(f.Context, KnativeServiceName, metav1.GetOptions{})
 		framework.ExpectNoError(err)
+
+		framework.ExpectNotEqual(pKsvc.Status.ObservedGeneration, vKsvc.Status.ObservedGeneration, "expected a mismatch between physical ksvc observed generation state and virtual")
+
+		// manually decrement vKsvc status observed generation
+		vKsvc.Status.ObservedGeneration--
 
 		framework.ExpectEqual(pKsvc.Status, vKsvc.Status, "expected virtual ksvc status to be in sync with physical ksvc")
 	})
@@ -224,7 +231,7 @@ var _ = ginkgo.Describe("Ksvc is synced down and applied as expected", func() {
 
 		err = wait.PollImmediate(time.Millisecond*500, framework.PollTimeout, func() (bool, error) {
 			pKsvc, err := pServingClient.Services(
-				framework.DefaultVclusterNamespace).
+				framework.DefaultFramework.VclusterNamespace).
 				Get(f.Context,
 					translate.PhysicalName(KnativeServiceName, ns),
 					metav1.GetOptions{})
@@ -361,15 +368,29 @@ var _ = ginkgo.Describe("Ksvc is synced down and applied as expected", func() {
 	})
 
 	ginkgo.It("Test if container concurrency is synced down", func() {
-		vKsvc, err := vServingClient.Services(ns).Get(f.Context, KnativeServiceName, metav1.GetOptions{})
-		framework.ExpectNoError(err)
+		err := wait.Poll(time.Millisecond*500, framework.PollTimeout, func() (bool, error) {
+			vKsvc, err := vServingClient.Services(ns).Get(f.Context, KnativeServiceName, metav1.GetOptions{})
+			if err != nil {
+				if kerrors.IsNotFound(err) {
+					return false, nil
+				}
 
-		vKsvc.Spec.Template.Spec.ContainerConcurrency = &UpdatedServingContainerConcurrency
-		_, err = vServingClient.Services(ns).Update(f.Context, vKsvc, metav1.UpdateOptions{})
+				return false, err
+			}
+
+			vKsvc.Spec.Template.Spec.ContainerConcurrency = &UpdatedServingContainerConcurrency
+			_, err = vServingClient.Services(ns).Update(f.Context, vKsvc, metav1.UpdateOptions{})
+			if err != nil {
+				return false, nil
+			}
+
+			return true, nil
+		})
+
 		framework.ExpectNoError(err)
 
 		err = wait.Poll(time.Millisecond*500, framework.PollTimeout, func() (bool, error) {
-			pKsvc, err := pServingClient.Services(framework.DefaultVclusterNamespace).
+			pKsvc, err := pServingClient.Services(framework.DefaultFramework.VclusterNamespace).
 				Get(f.Context, translate.PhysicalName(KnativeServiceName, ns), metav1.GetOptions{})
 			if err != nil {
 				return false, err
@@ -387,11 +408,17 @@ var _ = ginkgo.Describe("Ksvc is synced down and applied as expected", func() {
 	})
 
 	ginkgo.It("Test if TimeoutSeconds is synced down", func() {
-		vKsvc, err := vServingClient.Services(ns).Get(f.Context, KnativeServiceName, metav1.GetOptions{})
-		framework.ExpectNoError(err)
+		err := wait.Poll(time.Millisecond*500, framework.PollTimeout, func() (bool, error) {
+			vKsvc, err := vServingClient.Services(ns).Get(f.Context, KnativeServiceName, metav1.GetOptions{})
+			if err != nil {
+				if kerrors.IsNotFound(err) {
+					return false, nil
+				}
 
-		vKsvc.Spec.Template.Spec.TimeoutSeconds = &UpdatedTimeoutSeconds
-		err = wait.Poll(time.Millisecond*500, framework.PollTimeout, func() (bool, error) {
+				return false, err
+			}
+
+			vKsvc.Spec.Template.Spec.TimeoutSeconds = &UpdatedTimeoutSeconds
 			_, err = vServingClient.Services(ns).Update(f.Context, vKsvc, metav1.UpdateOptions{})
 			if err != nil {
 				return false, nil
@@ -403,7 +430,7 @@ var _ = ginkgo.Describe("Ksvc is synced down and applied as expected", func() {
 		framework.ExpectNoError(err)
 
 		err = wait.Poll(time.Millisecond*500, framework.PollTimeout, func() (bool, error) {
-			pKsvc, err := pServingClient.Services(framework.DefaultVclusterNamespace).
+			pKsvc, err := pServingClient.Services(framework.DefaultFramework.VclusterNamespace).
 				Get(f.Context, translate.PhysicalName(KnativeServiceName, ns), metav1.GetOptions{})
 			if err != nil {
 				return false, err

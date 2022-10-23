@@ -90,7 +90,7 @@ var _ = ginkgo.Describe("Test config is synced down and applied as expected", fu
 		ginkgo.By("Test if vKsvc creates a pConfig", func() {
 			err := wait.PollImmediate(time.Second, framework.PollTimeout, func() (bool, error) {
 				_, err := pServingClient.Configurations(
-					framework.DefaultVclusterNamespace).
+					framework.DefaultFramework.VclusterNamespace).
 					Get(f.Context,
 						translate.PhysicalName(KnativeServiceName, ns),
 						metav1.GetOptions{})
