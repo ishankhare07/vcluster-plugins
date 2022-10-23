@@ -19,6 +19,7 @@ func (k *ksvcSyncer) translate(vObj client.Object) *ksvcv1.Service {
 
 func (k *ksvcSyncer) translateUpdate(pObj, vObj *ksvcv1.Service) *ksvcv1.Service {
 	if equality.Semantic.DeepEqual(pObj, vObj) {
+		klog.Infof("no diff found, returning")
 		return nil
 	}
 
@@ -110,6 +111,9 @@ func newIfNil(updated, obj *ksvcv1.Service) *ksvcv1.Service {
 }
 
 func updateConfigurationSpec(newPKsvc, pObj, vObj *ksvcv1.Service) *ksvcv1.Service {
+	klog.Info("checking diff in configuration spec")
+	klog.Infof("vImage: ", vObj.Spec.ConfigurationSpec.Template.Spec.Containers[0].Image)
+	klog.Infof("pImage: ", pObj.Spec.ConfigurationSpec.Template.Spec.Containers[0].Image)
 	if !equality.Semantic.DeepEqual(
 		vObj.Spec.ConfigurationSpec.Template.Spec.Containers[0].Image,
 		pObj.Spec.ConfigurationSpec.Template.Spec.Containers[0].Image) {

@@ -67,8 +67,6 @@ func (k *ksvcSyncer) Sync(ctx *context.SyncContext, pObj client.Object, vObj cli
 			klog.Errorf("Error updating virtual ksvc status for %s:%s, %v", vKsvc.Namespace, vKsvc.Name, err)
 			return ctrl.Result{}, err
 		}
-
-		return ctrl.Result{}, nil
 	}
 
 	// sync and update ksvc spec downwards
@@ -83,7 +81,6 @@ func (k *ksvcSyncer) Sync(ctx *context.SyncContext, pObj client.Object, vObj cli
 		}
 
 		klog.Infof("successfully updated physical ksvc %s:%s spec", pKsvc.Namespace, pKsvc.Name)
-		return ctrl.Result{}, nil
 	}
 
 	updated := k.translateUpdateBackwards(pKsvc, vKsvc)

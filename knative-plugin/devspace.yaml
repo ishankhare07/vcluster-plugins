@@ -2,10 +2,8 @@ version: v2beta1
 name: vcluster-knative
 
 vars:
-  - name: PLUGIN_IMAGE
-    value: ishankhare07/vcluster-knative-serving-plugin
-  - name: K3S_IMAGE
-    value: rancher/k3s:v1.25.0-k3s1
+  PLUGIN_IMAGE: ishankhare07/vcluster-knative-serving-plugin
+  K3S_IMAGE: rancher/k3s:v1.25.0-k3s1
 images:
   knative-dev:
     image: ${PLUGIN_IMAGE}-dev
@@ -50,9 +48,9 @@ deployments:
             create: true
           role:
             extended: true
-        serviceAccount:
-          create: false
-          name: default
+        # serviceAccount:
+        #   create: false
+        #   name: default
         syncer:
           readinessProbe:
             enabled: false
